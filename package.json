@@ -1,0 +1,16 @@
+{
+  "name": "yaml-line-lint",
+  "version": "0.1.0",
+  "description": "A YAML linter that reports every finding with an exact line, column, and source snippet.",
+  "type": "module",
+  "license": "MIT",
+  "bin": {
+    "yamlint": "./src/cli.ts"
+  },
+  "scripts": {
+    "start": "node --experimental-strip-types src/cli.ts"
+  },
+  "engines": {
+    "node": ">=22.6.0"
+  }
+}
