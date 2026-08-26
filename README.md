@@ -76,12 +76,20 @@ siblings. That's enough structure to catch duplicate keys correctly
 across nested block mappings and sequences without the overhead of
 building a full AST.
 
+Flow-style collections (`{a: 1}`, `[1, 2, 3]`) get a separate pass:
+once a value opens a `{` or `[`, the scanner switches to tracking
+brackets and commas instead of columns, since flow entries don't line
+up with indentation. Duplicate keys are still caught inside flow
+mappings, including ones that span multiple lines.
+
 ## Known limitations
 
-This covers block-style YAML, which is what almost every config file
-uses. It does not currently handle:
+This covers block-style and flow-style YAML, which between them are
+what almost every config file uses. It does not currently handle:
 
-- Flow-style collections (`{a: 1}`, `[1, 2, 3]`)
+- The flow-sequence shorthand for single-pair mappings (`[a: 1, b: 2]`,
+  equivalent to `[{a: 1}, {b: 2}]`) -- entries there are treated as
+  plain values, not keys
 - Multi-document files (content after a second `---` is scanned as if
   it were a continuation of the same document)
 - Anchors, aliases, and merge keys (`&foo`, `*foo`, `<<:`)
