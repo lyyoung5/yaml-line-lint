@@ -92,9 +92,16 @@ what almost every config file uses. It does not currently handle:
   plain values, not keys
 - Multi-document files (content after a second `---` is scanned as if
   it were a continuation of the same document)
-- Anchors, aliases, and merge keys (`&foo`, `*foo`, `<<:`)
 - Schema or type validation (this is a syntax/style linter, not a
   validator against your app's config shape)
+
+Anchors (`&name`) on a key are recognized and skipped over, so
+`&anchor name: value` still checks `name` for duplicates rather than
+treating `&anchor name` as the key text. Aliases (`*name`) are only
+ever values, so they need no special handling, and a merge key
+(`<<:`) is checked like any other key -- a mapping with two `<<:`
+entries at the same level is flagged the same way two `name:` entries
+would be.
 
 ## License
 

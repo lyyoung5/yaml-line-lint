@@ -10,8 +10,14 @@
 //
 // Known gaps: the flow-sequence shorthand for single-pair mappings
 // (`[a: 1, b: 2]`, equivalent to `[{a: 1}, {b: 2}]`) isn't recognized --
-// its entries are treated as plain values, not keys. Anchors, aliases,
-// and merge keys aren't handled.
+// its entries are treated as plain values, not keys.
+//
+// Anchors (`&name`) are skipped over before key detection, in both
+// block and flow style, so `&anchor key: value` still registers `key`
+// rather than the anchor tag itself. Aliases (`*name`) and merge keys
+// (`<<:`) need no special handling: an alias is only ever a value, and
+// a merge key is just ordinary key text as far as duplicate detection
+// is concerned, so the existing key-matching logic already covers it.
 
 export interface Position {
   line: number
@@ -58,6 +64,10 @@ function newFlowState(): FlowState {
 // indent-stripped) line. Group 1 is the raw key text, quoted or not.
 const KEY_PATTERN = /^([^\s:'"#][^:]*|"(?:[^"\\]|\\.)*"|'(?:[^']|'')*')\s*:(\s|$)/
 
+// Matches a node anchor (`&name `) at the start of a line or token,
+// including the whitespace that separates it from the node it tags.
+const ANCHOR_PATTERN = /^&\S+[ \t]+/
+
 // Characters that end a bare (unquoted) token inside a flow collection.
 const FLOW_TOKEN_BOUNDARY = /[,:{}[\]'"]/
 
@@ -101,6 +111,15 @@ function leadingWhitespaceWidth(line: string): number {
   let i = 0
   while (i < line.length && (line[i] === " " || line[i] === "\t")) i++
   return i
+}
+
+// Strips a leading anchor tag (`&name `) from block-style content,
+// shifting `column` by however much was removed so positions reported
+// for the node underneath stay accurate.
+function stripAnchor(content: string, column: number): { content: string; column: number } {
+  const match = ANCHOR_PATTERN.exec(content)
+  if (!match) return { content, column }
+  return { content: content.slice(match[0].length), column: column + match[0].length }
 }
 
 function extractKey(content: string): { key: string; matchEnd: number } | null {
@@ -200,6 +219,17 @@ function scanFlow(
     if (ch === ",") {
       state.expectingKey = topIsMapping()
       i++
+      continue
+    }
+
+    // An anchor tag on a key or value (`&name `) is skipped without
+    // touching `expectingKey`, so a key that follows one -- quoted,
+    // bare, or itself a nested collection -- is still recognized.
+    if (ch === "&") {
+      let j = i + 1
+      while (j < text.length && !FLOW_TOKEN_BOUNDARY.test(text[j]) && text[j] !== " " && text[j] !== "\t") j++
+      while (j < text.length && (text[j] === " " || text[j] === "\t")) j++
+      i = j
       continue
     }
 
@@ -336,6 +366,9 @@ export function findDuplicateKeys(text: string): Finding[] {
       }
       if (rest.length === 0) continue
 
+      ;({ content: rest, column: restColumn } = stripAnchor(rest, restColumn))
+      if (rest.length === 0) continue
+
       if (rest[0] === "{" || rest[0] === "[") {
         flow = maybeStartFlowValue(withoutComment, restColumn - 1, lineNumber, findings)
         continue
@@ -351,8 +384,11 @@ export function findDuplicateKeys(text: string): Finding[] {
       continue
     }
 
+    ;({ content, column } = stripAnchor(content, column))
+    if (content.length === 0) continue
+
     if (content[0] === "{" || content[0] === "[") {
-      flow = maybeStartFlowValue(withoutComment, indent, lineNumber, findings)
+      flow = maybeStartFlowValue(withoutComment, column - 1, lineNumber, findings)
       continue
     }
 
@@ -388,7 +424,7 @@ export function findDuplicateKeys(text: string): Finding[] {
       scope.keys.set(found.key, { line: lineNumber, column })
     }
 
-    flow = maybeStartFlowValue(withoutComment, indent + found.matchEnd, lineNumber, findings)
+    flow = maybeStartFlowValue(withoutComment, column - 1 + found.matchEnd, lineNumber, findings)
   }
 
   return findings
