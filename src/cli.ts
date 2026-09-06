@@ -3,6 +3,15 @@ import { readFileSync } from "node:fs"
 import { lint } from "./linter.ts"
 import type { Finding } from "./linter.ts"
 
+type Format = "text" | "json"
+
+interface FileResult {
+  file: string
+  findings: Finding[]
+  source?: string
+  readError?: string
+}
+
 function renderFinding(filename: string, lines: string[], finding: Finding): string {
   const sourceLine = lines[finding.position.line - 1] ?? ""
   const gutter = String(finding.position.line)
@@ -31,46 +40,104 @@ function renderFinding(filename: string, lines: string[], finding: Finding): str
   return parts.join("\n")
 }
 
-function lintFile(filename: string): { errors: number; warnings: number } {
+function lintFile(filename: string): FileResult {
   let source: string
   try {
     source = readFileSync(filename, "utf8")
   } catch (err) {
-    process.stderr.write(`${filename}: cannot read file (${(err as Error).message})\n`)
-    return { errors: 1, warnings: 0 }
+    return { file: filename, findings: [], readError: (err as Error).message }
   }
+  return { file: filename, findings: lint(source), source }
+}
 
-  const lines = source.split(/\r\n|\r|\n/)
-  const findings = lint(source)
+function countSeverities(results: FileResult[]): { errors: number; warnings: number } {
   let errors = 0
   let warnings = 0
-
-  for (const finding of findings) {
-    process.stdout.write(renderFinding(filename, lines, finding) + "\n\n")
-    if (finding.severity === "error") errors++
-    else warnings++
+  for (const result of results) {
+    if (result.readError) {
+      errors++
+      continue
+    }
+    for (const finding of result.findings) {
+      if (finding.severity === "error") errors++
+      else warnings++
+    }
   }
-
   return { errors, warnings }
 }
 
+function printText(results: FileResult[]): void {
+  for (const result of results) {
+    if (result.readError) {
+      process.stderr.write(`${result.file}: cannot read file (${result.readError})\n`)
+      continue
+    }
+    const lines = (result.source ?? "").split(/\r\n|\r|\n/)
+    for (const finding of result.findings) {
+      process.stdout.write(renderFinding(result.file, lines, finding) + "\n\n")
+    }
+  }
+
+  const { errors, warnings } = countSeverities(results)
+  process.stdout.write(`${errors} error(s), ${warnings} warning(s)\n`)
+}
+
+function printJson(results: FileResult[]): void {
+  const { errors, warnings } = countSeverities(results)
+  const files = results.map((result) =>
+    result.readError
+      ? { file: result.file, error: result.readError }
+      : { file: result.file, findings: result.findings },
+  )
+  process.stdout.write(JSON.stringify({ files, errors, warnings }, null, 2) + "\n")
+}
+
+function parseArgs(argv: string[]): { format: Format; files: string[] } | null {
+  let format: Format = "text"
+  const files: string[] = []
+
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i]
+    let value: string | undefined
+
+    if (arg === "--format") {
+      value = argv[++i]
+    } else if (arg.startsWith("--format=")) {
+      value = arg.slice("--format=".length)
+    } else {
+      files.push(arg)
+      continue
+    }
+
+    if (value !== "text" && value !== "json") {
+      process.stderr.write(`unknown format "${value ?? ""}", expected "text" or "json"\n`)
+      return null
+    }
+    format = value
+  }
+
+  return { format, files }
+}
+
 function main(argv: string[]): number {
-  if (argv.length === 0) {
-    process.stderr.write("usage: yamlint <file...>\n")
+  const parsed = parseArgs(argv)
+  if (!parsed) return 2
+
+  const { format, files } = parsed
+  if (files.length === 0) {
+    process.stderr.write("usage: yamlint [--format text|json] <file...>\n")
     return 2
   }
 
-  let totalErrors = 0
-  let totalWarnings = 0
-
-  for (const filename of argv) {
-    const { errors, warnings } = lintFile(filename)
-    totalErrors += errors
-    totalWarnings += warnings
+  const results = files.map(lintFile)
+  if (format === "json") {
+    printJson(results)
+  } else {
+    printText(results)
   }
 
-  process.stdout.write(`${totalErrors} error(s), ${totalWarnings} warning(s)\n`)
-  return totalErrors > 0 ? 1 : 0
+  const { errors } = countSeverities(results)
+  return errors > 0 ? 1 : 0
 }
 
 process.exit(main(process.argv.slice(2)))

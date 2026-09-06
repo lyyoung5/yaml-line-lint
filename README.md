@@ -58,6 +58,42 @@ config.yaml:3:3: error [duplicate-key] key "name" is already defined at line 2
 The exit code is 1 if any errors were found, 0 otherwise, so it works
 as a CI gate.
 
+### JSON output
+
+Pass `--format json` to get machine-readable output instead, for
+feeding into another tool:
+
+```
+node --experimental-strip-types src/cli.ts --format json config.yaml
+```
+
+```json
+{
+  "files": [
+    {
+      "file": "config.yaml",
+      "findings": [
+        {
+          "rule": "duplicate-key",
+          "severity": "error",
+          "message": "key \"name\" is already defined at line 2",
+          "position": { "line": 3, "column": 3 },
+          "length": 4,
+          "note": "first definition of \"name\"",
+          "notePosition": { "line": 2, "column": 3 }
+        }
+      ]
+    }
+  ],
+  "errors": 1,
+  "warnings": 0
+}
+```
+
+A file that can't be read shows up as `{ "file": "...", "error": "..." }`
+instead of a `findings` array. The exit code rule is the same either
+way: 1 if `errors` is greater than zero.
+
 ## Rules implemented so far
 
 | rule                  | severity | catches                                              |
