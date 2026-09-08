@@ -2,8 +2,30 @@
 import { readFileSync } from "node:fs"
 import { lint } from "./linter.ts"
 import type { Finding } from "./linter.ts"
+import { defaultConfig, parseConfig } from "./config.ts"
+import type { Config } from "./config.ts"
 
 type Format = "text" | "json"
+
+const DEFAULT_CONFIG_FILENAME = ".yamllint.json"
+
+// Loads `explicitPath` if given, erroring out if it can't be read.
+// Otherwise looks for the default config filename in the current
+// directory and falls back to built-in defaults if that isn't there
+// either -- a missing default config is normal, not an error.
+function loadConfig(explicitPath: string | undefined): Config {
+  const path = explicitPath ?? DEFAULT_CONFIG_FILENAME
+  let text: string
+  try {
+    text = readFileSync(path, "utf8")
+  } catch (err) {
+    if (explicitPath) {
+      throw new Error(`cannot read config file "${path}": ${(err as Error).message}`)
+    }
+    return defaultConfig()
+  }
+  return parseConfig(text, path)
+}
 
 interface FileResult {
   file: string
@@ -40,14 +62,14 @@ function renderFinding(filename: string, lines: string[], finding: Finding): str
   return parts.join("\n")
 }
 
-function lintFile(filename: string): FileResult {
+function lintFile(filename: string, config: Config): FileResult {
   let source: string
   try {
     source = readFileSync(filename, "utf8")
   } catch (err) {
     return { file: filename, findings: [], readError: (err as Error).message }
   }
-  return { file: filename, findings: lint(source), source }
+  return { file: filename, findings: lint(source, config), source }
 }
 
 function countSeverities(results: FileResult[]): { errors: number; warnings: number } {
@@ -92,44 +114,58 @@ function printJson(results: FileResult[]): void {
   process.stdout.write(JSON.stringify({ files, errors, warnings }, null, 2) + "\n")
 }
 
-function parseArgs(argv: string[]): { format: Format; files: string[] } | null {
+function parseArgs(argv: string[]): { format: Format; configPath: string | undefined; files: string[] } | null {
   let format: Format = "text"
+  let configPath: string | undefined
   const files: string[] = []
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]
-    let value: string | undefined
 
-    if (arg === "--format") {
-      value = argv[++i]
-    } else if (arg.startsWith("--format=")) {
-      value = arg.slice("--format=".length)
-    } else {
-      files.push(arg)
+    if (arg === "--format" || arg.startsWith("--format=")) {
+      const value = arg === "--format" ? argv[++i] : arg.slice("--format=".length)
+      if (value !== "text" && value !== "json") {
+        process.stderr.write(`unknown format "${value ?? ""}", expected "text" or "json"\n`)
+        return null
+      }
+      format = value
       continue
     }
 
-    if (value !== "text" && value !== "json") {
-      process.stderr.write(`unknown format "${value ?? ""}", expected "text" or "json"\n`)
-      return null
+    if (arg === "--config" || arg.startsWith("--config=")) {
+      configPath = arg === "--config" ? argv[++i] : arg.slice("--config=".length)
+      if (configPath === undefined) {
+        process.stderr.write("--config requires a path\n")
+        return null
+      }
+      continue
     }
-    format = value
+
+    files.push(arg)
   }
 
-  return { format, files }
+  return { format, configPath, files }
 }
 
 function main(argv: string[]): number {
   const parsed = parseArgs(argv)
   if (!parsed) return 2
 
-  const { format, files } = parsed
+  const { format, configPath, files } = parsed
   if (files.length === 0) {
-    process.stderr.write("usage: yamlint [--format text|json] <file...>\n")
+    process.stderr.write("usage: yamlint [--format text|json] [--config <path>] <file...>\n")
     return 2
   }
 
-  const results = files.map(lintFile)
+  let config: Config
+  try {
+    config = loadConfig(configPath)
+  } catch (err) {
+    process.stderr.write(`${(err as Error).message}\n`)
+    return 2
+  }
+
+  const results = files.map((file) => lintFile(file, config))
   if (format === "json") {
     printJson(results)
   } else {

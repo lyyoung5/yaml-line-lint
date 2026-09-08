@@ -1,7 +1,10 @@
 import { findDuplicateKeys } from "./parser.ts"
 import type { Finding } from "./parser.ts"
+import { defaultConfig } from "./config.ts"
+import type { Config, RuleName } from "./config.ts"
 
 export type { Finding, Position } from "./parser.ts"
+export type { Config, RuleName, RuleSetting, Severity } from "./config.ts"
 
 function checkTabs(text: string): Finding[] {
   const findings: Finding[] = []
@@ -49,8 +52,16 @@ function checkTrailingWhitespace(text: string): Finding[] {
   return findings
 }
 
-export function lint(text: string): Finding[] {
+export function lint(text: string, config: Config = defaultConfig()): Finding[] {
   const findings = [...checkTabs(text), ...checkTrailingWhitespace(text), ...findDuplicateKeys(text)]
-  findings.sort((a, b) => a.position.line - b.position.line || a.position.column - b.position.column)
-  return findings
+
+  const active: Finding[] = []
+  for (const finding of findings) {
+    const setting = config[finding.rule as RuleName]
+    if (setting === "off") continue
+    active.push(setting === "error" || setting === "warning" ? { ...finding, severity: setting } : finding)
+  }
+
+  active.sort((a, b) => a.position.line - b.position.line || a.position.column - b.position.column)
+  return active
 }

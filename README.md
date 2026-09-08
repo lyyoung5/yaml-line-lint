@@ -94,6 +94,31 @@ A file that can't be read shows up as `{ "file": "...", "error": "..." }`
 instead of a `findings` array. The exit code rule is the same either
 way: 1 if `errors` is greater than zero.
 
+### Configuring rules
+
+By default `yamlint` looks for a `.yamllint.json` file in the current
+directory. If one exists, it can turn rules off or change their
+severity:
+
+```json
+{
+  "rules": {
+    "trailing-whitespace": "off",
+    "no-tabs": "warning"
+  }
+}
+```
+
+A rule left out of the `rules` object keeps its built-in default. Valid
+settings are `"error"`, `"warning"`, and `"off"`. Pass `--config <path>`
+to use a config file at a different location instead of the default
+one; unlike the automatic lookup, a missing or invalid `--config` path
+is an error.
+
+```
+node --experimental-strip-types src/cli.ts --config ci/yamllint.json config.yaml
+```
+
 ## Rules implemented so far
 
 | rule                  | severity | catches                                              |
