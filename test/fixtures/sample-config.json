@@ -1,0 +1,6 @@
+{
+  "rules": {
+    "trailing-whitespace": "off",
+    "no-tabs": "warning"
+  }
+}

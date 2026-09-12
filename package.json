@@ -8,7 +8,8 @@
     "yamlint": "./src/cli.ts"
   },
   "scripts": {
-    "start": "node --experimental-strip-types src/cli.ts"
+    "start": "node --experimental-strip-types src/cli.ts",
+    "test": "node --experimental-strip-types --test test/config.test.ts test/linter.test.ts test/parser.test.ts"
   },
   "engines": {
     "node": ">=22.6.0"

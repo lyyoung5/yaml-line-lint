@@ -1,0 +1,4 @@
+service:
+  name: original
+  name: overridden
+  port: 8080

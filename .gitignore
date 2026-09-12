@@ -3,3 +3,10 @@ dist/
 *.tsbuildinfo
 *.log
 .DS_Store
+
+# scratch fixtures that needed real trailing whitespace on disk, which every
+# editor save path here strips -- the actual tests build that content inline
+# instead
+test/fixtures/.probe.yaml
+test/fixtures/trailing-whitespace.yaml
+test/fixtures/multiple-findings.yaml

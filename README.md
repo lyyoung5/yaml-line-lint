@@ -119,6 +119,19 @@ is an error.
 node --experimental-strip-types src/cli.ts --config ci/yamllint.json config.yaml
 ```
 
+## Running the tests
+
+```
+npm test
+```
+
+This runs `node --test` against the files in `test/`, using Node's
+built-in test runner (`node:test` / `node:assert`) -- no test framework
+dependency. Most cases load a fixture from `test/fixtures/`; a couple
+that need trailing whitespace in the input are built as inline strings
+in the test file instead, since checked-in fixtures don't survive an
+editor stripping trailing whitespace on save.
+
 ## Rules implemented so far
 
 | rule                  | severity | catches                                              |
